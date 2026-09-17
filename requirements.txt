@@ -1,0 +1,13 @@
+# Core ML & Deep Learning
+torch
+torchvision
+git+https://github.com/openai/CLIP.git
+
+# Vector Search
+faiss-cpu
+
+# Web UI & Data Handling
+streamlit
+numpy
+pandas
+Pillow
