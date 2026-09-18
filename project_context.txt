@@ -1,0 +1,43 @@
+Here is a complete, structured context summary of the "Antriksha Search Engine (ASE)" project based on a detailed review of its source files.
+
+# Project Overview: Antriksha Search Engine (ASE)
+ASE is a **Cross-Modal Satellite Image Retrieval System** built with Python and Streamlit. It allows users to perform **Text-to-Image** and **Image-to-Image (Cross-Modal)** searches on satellite data. Specifically, it heavily emphasizes cross-modality between SAR (Synthetic Aperture Radar) and Optical satellite imagery, using a fine-tuned vision-language model ("RemoteCLIP"). It uses FAISS (Facebook AI Similarity Search) to perform lightning-fast similarity lookups across the indexed satellite image database.
+
+## 1. Core Application: `app.py`
+This is the main entry point for the Streamlit UI, designed with a dashboard-style interface.
+- **Initialization:** Sets up the page config, dynamic sidebars (showing active index count, vector DB size, and retrieval latency), and loads the FAISS index by reading `database_vectors.npy` and `database_names.npy` into memory. 
+- **Tab 1 - Text-to-Image:**
+  - Accepts a natural language text query (e.g., "satellite view of a dense forest").
+  - Computes the text embedding using `get_text_embedding`.
+  - Searches the FAISS index for the top 5 closest image matches.
+  - Generates fake "mission report" telemetry (Indian latitude/longitude and confidence scores) for UI realism.
+  - Allows exporting a CSV "Mission Report" of the search results.
+- **Tab 2 - Image-to-Image (Cross-Modal):**
+  - Allows the user to upload a query image (SAR or Optical).
+  - Computes the uploaded image's embedding via `get_image_embedding`.
+  - Performs a larger K-nearest neighbor FAISS search (fetch_k=100) and routes it through a **Cross-Modal Routing Layer**.
+  - **The Routing Logic:** Ensures that if the query is a SAR image, the search strictly returns Optical matches, and vice versa. It filters out identical modal matches.
+  - Displays the top 5 valid cross-modal matches and similarly offers a downloadable CSV report.
+
+## 2. Model & Embedding Layer: `extractor.py`
+This module acts as the AI engine, loading the state-of-the-art RemoteCLIP model to generate fixed 512-dimensional vector embeddings for both text and images.
+- **Model Loading:** Initializes a standard OpenAI CLIP (`ViT-B/32`) architecture but immediately injects custom pre-trained domain-specific weights located at `models/RemoteCLIP-ViT-B-32.pt`.
+- **`get_image_embedding(image_path)`:** Opens an image, applies CLIP preprocessing, passes it through the vision encoder, and returns a 512-D flat numpy array.
+- **`get_text_embedding(text)`:** Tokenizes the text query, passes it through the CLIP text encoder, and returns the 512-D flat numpy array.
+
+## 3. Database Construction: `build_db.py`
+An offline utility script responsible for indexing the dataset and building the vector database that powers the search engine.
+- **Scanning:** Iterates through every `.png`, `.jpg`, and `.jpeg` file in the `dataset/gallery` folder.
+- **Embedding Generation:** Calls `get_image_embedding` from `extractor.py` for each image.
+- **Persistence:** Collects all 512-D vectors and corresponding filenames, converts them into fast numpy arrays, and saves them to the disk as `database_vectors.npy` and `database_names.npy`.
+
+## 4. Dataset Preparation: `split.py`
+A data-wrangling script meant to handle a specific raw Kaggle paired dataset format.
+- **The Problem:** The raw Kaggle images contain paired SAR and Optical views stitched together side-by-side (meaning the width is exactly double the height).
+- **The Solution:** It iterates over the raw dataset. For stitched images (width == 2 * height), it crops them directly down the middle.
+- **Saving Strategy:** The left half is saved to the `gallery` with an `_SAR.png` suffix, and the right half is saved with an `_OPT.png` suffix. Standard portrait/landscape photos are copied over directly without cropping. 
+
+## 5. System Diagnostics: `test_remote.py`
+A tiny standalone script designed to verify the environment and model dependencies.
+- Confirms that the `models/RemoteCLIP-ViT-B-32.pt` weights load successfully without PyTorch shape mismatches.
+- Attempts to process a single hardcoded image (`ROIs1868_summer_s1_59_p104_OPT.png`) to verify that the vector output shape is correctly generated as `(1, 512)`.
